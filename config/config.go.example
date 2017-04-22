@@ -1,0 +1,32 @@
+package config
+
+import (
+	"time"
+
+	"github.com/tombooth/home"
+	"github.com/tombooth/home/blinds"
+	"github.com/tombooth/home/lights"
+)
+
+var (
+	Port = ":4000"
+	StepInterval = 10 * time.Second
+)
+
+func World() (*home.World, error) {
+	world := home.NewWorld()
+
+	// CONTROLLERS
+	world.AddController(&lights.LightController{})
+	world.AddController(&blinds.BlindController{})
+
+	// DEVICES
+	world.AddDevice(lights.NewDummyLight("1234", "A light", false))
+	world.AddDevice(blinds.NewDummyBlind("2345", "A blind", true))
+
+	return world, nil
+}
+
+func Groups(world *home.World) ([]home.Group, error) {
+	return []home.Group{}, nil
+}
