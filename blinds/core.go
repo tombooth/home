@@ -1,6 +1,7 @@
 package blinds
 
 import (
+	"context"
 	"encoding/json"
 
     "github.com/tombooth/home"
@@ -14,8 +15,8 @@ const BlindType = "blind"
 type Blind interface {
     home.Device
 
-    Open() error
-    Close() error
+    Open(context.Context) error
+    Close(context.Context) error
 }
 
 type DefaultBlind struct { }
@@ -66,14 +67,14 @@ func (_ *BlindController) For() home.DeviceType {
     return BlindType
 }
 
-func (_ *BlindController) Reconcile(b home.Device, c, d home.State) error {
+func (_ *BlindController) Reconcile(ctx context.Context, b home.Device, c, d home.State) error {
     blind, current, desired := b.(Blind), c.(BlindState), d.(BlindState)
 
     if current.Open() != desired.Open() {
         if desired.Open() {
-            return blind.Open()
+            return blind.Open(ctx)
         } else {
-            return blind.Close()
+            return blind.Close(ctx)
         }
     }
 

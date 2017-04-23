@@ -1,6 +1,8 @@
 package blinds
 
 import (
+	"context"
+
 	"github.com/tombooth/home"
 )
 
@@ -22,14 +24,16 @@ func NewDummyBlind(id home.DeviceId, name string, isOn bool) Blind {
 
 func (l *dummyBlind) Id() home.DeviceId { return l.id }
 func (l *dummyBlind) Name() string { return l.name }
-func (l *dummyBlind) State() (home.State, error) { return l.state, nil }
+func (l *dummyBlind) State(_ context.Context) (home.State, error) {
+	return l.state, nil
+}
 
-func (l *dummyBlind) Open() error {
+func (l *dummyBlind) Open(_ context.Context) error {
 	l.state = NewBlindState(true)
 	return nil
 }
 
-func (l *dummyBlind) Close() error {
+func (l *dummyBlind) Close(_ context.Context) error {
 	l.state = NewBlindState(false)
 	return nil
 }

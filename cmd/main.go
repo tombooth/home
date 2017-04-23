@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"sync"
@@ -10,6 +11,13 @@ import (
 	"github.com/tombooth/home/config"
 	"github.com/tombooth/home/web"
 )
+
+func elapsed(label string, fn func()) {
+	start := time.Now()
+	fn()
+	end := time.Now()
+	log.Printf("%s took %s\n", label, end.Sub(start))
+}
 
 func main() {
 
@@ -28,7 +36,7 @@ func main() {
 	}
 
 	log.Println("Seeding the world")
-	if err = world.Seed(); err != nil {
+	if err = world.Seed(context.Background()); err != nil {
 		panic(err)
 	}
 
@@ -41,9 +49,12 @@ func main() {
 
 			case <- stepTicker.C:
 				log.Println("Stepping the world forward")
-				if err := world.Step(); err != nil {
-					log.Println(err)
-				}
+				timeoutContext, _ := context.WithTimeout(context.Background(), config.StepInterval)
+				elapsed("Stepping", func() {
+					if err := world.Step(timeoutContext); err != nil {
+						log.Println(err)
+					}
+				})
 
 			case transition := <- transitions:
 				log.Printf("Applying a transition: %v\n", transition)

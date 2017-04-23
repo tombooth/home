@@ -1,6 +1,7 @@
 package home
 
 import (
+	"context"
     "fmt"
 )
 
@@ -58,7 +59,7 @@ func (w *World) AddDevices(devices []Device) error {
     return nil
 }
 
-func (w *World) Snapshot() (WorldState, error) {
+func (w *World) Snapshot(ctx context.Context) (WorldState, error) {
     snapshot := WorldState{}
 
     for deviceType, devices := range w.Devices {
@@ -67,7 +68,7 @@ func (w *World) Snapshot() (WorldState, error) {
         }
 
         for deviceId, device := range devices {
-            if state, err := device.State(); err != nil {
+            if state, err := device.State(ctx); err != nil {
                 return snapshot, err
             } else {
 
@@ -79,8 +80,8 @@ func (w *World) Snapshot() (WorldState, error) {
     return snapshot, nil
 }
 
-func (w *World) Seed() error {
-	if snapshot, err := w.Snapshot(); err != nil {
+func (w *World) Seed(ctx context.Context) error {
+	if snapshot, err := w.Snapshot(ctx); err != nil {
 		return err
 	} else {
 		w.Desired = snapshot
@@ -89,8 +90,8 @@ func (w *World) Seed() error {
 	return nil
 }
 
-func (w *World) Step() error {
-    currentWorld, err := w.Snapshot()
+func (w *World) Step(ctx context.Context) error {
+    currentWorld, err := w.Snapshot(ctx)
     if err != nil {
         return err
     }
@@ -113,7 +114,7 @@ func (w *World) Step() error {
                 return fmt.Errorf("No desired state found for '%s/%s'", deviceType, deviceId)
             }
 
-            if err := controller.Reconcile(device, state, desired); err != nil {
+            if err := controller.Reconcile(ctx, device, state, desired); err != nil {
                 return err
             }
         }

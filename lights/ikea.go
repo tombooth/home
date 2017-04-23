@@ -1,6 +1,7 @@
 package lights
 
 import (
+	"context"
     "encoding/json"
     "fmt"
     "os/exec"
@@ -40,28 +41,42 @@ func NewIkeaGateway(gatewayAddress, key string) *IkeaGateway {
     }
 }
 
-func (g *IkeaGateway) coap(method, path, payload string) (string, error) {
-    cmd := exec.Command(
-        "/usr/local/bin/coap-client",
-        "-m", method,
-        "-u", "Client_identity",
-        "-k", g.key,
-        "-e", payload,
-        fmt.Sprintf("%s%s", g.uri, path),
-    )
+func (g *IkeaGateway) coap(ctx context.Context, method, path, payload string) (string, error) {
+	out := make(chan string)
+	errOut := make(chan error)
 
-    output, err := cmd.Output()
-    if err != nil {
-        return "", nil
-    }
+	go func() {
+		cmd := exec.Command(
+			"/usr/local/bin/coap-client",
+			"-m", method,
+			"-u", "Client_identity",
+			"-k", g.key,
+			"-e", payload,
+			fmt.Sprintf("%s%s", g.uri, path),
+		)
 
-    return findLine(string(output), `^[\[\{].+$`), nil
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			errOut <- err
+		} else {
+			out <- findLine(string(output), `^[\[\{].+$`)
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case err := <-errOut:
+		return "", err
+	case val := <-out:
+		return val, nil
+	}
 }
 
-func (g *IkeaGateway) AddressLight(id int) (Light, error) {
+func (g *IkeaGateway) AddressLight(ctx context.Context, id int) (Light, error) {
 	path := fmt.Sprintf("/15001/%d", id)
 
-    if deviceJson, err := g.coap("get", path, ""); err != nil {
+    if deviceJson, err := g.coap(ctx, "get", path, ""); err != nil {
 		return nil, err
 	} else {
 		name := gjson.Get(deviceJson, "9001").String()
@@ -69,10 +84,10 @@ func (g *IkeaGateway) AddressLight(id int) (Light, error) {
 	}
 }
 
-func (g *IkeaGateway) AddressGroup(id int) (home.Group, error) {
+func (g *IkeaGateway) AddressGroup(ctx context.Context, id int) (home.Group, error) {
 	path := fmt.Sprintf("/15004/%d", id)
 
-    if groupJson, err := g.coap("get", path, ""); err != nil {
+    if groupJson, err := g.coap(ctx, "get", path, ""); err != nil {
 		return home.Group{}, err
 	} else {
 		name := gjson.Get(groupJson, "9001").String()
@@ -89,8 +104,8 @@ func (g *IkeaGateway) AddressGroup(id int) (home.Group, error) {
 	}
 }
 
-func (g *IkeaGateway) AllLights() ([]home.Device, error) {
-    coapJson, err := g.coap("get", "/15001", "")
+func (g *IkeaGateway) AllLights(ctx context.Context) ([]home.Device, error) {
+    coapJson, err := g.coap(ctx, "get", "/15001", "")
     if err != nil {
         return []home.Device{}, err
     }
@@ -101,7 +116,7 @@ func (g *IkeaGateway) AllLights() ([]home.Device, error) {
     lights := []home.Device{}
 
     for _, id := range ids {
-		if light , err := g.AddressLight(id); err != nil {
+		if light , err := g.AddressLight(ctx, id); err != nil {
 			return []home.Device{}, err
 		} else {
 			lights = append(lights, light)
@@ -111,8 +126,8 @@ func (g *IkeaGateway) AllLights() ([]home.Device, error) {
     return lights, nil
 }
 
-func (g *IkeaGateway) AllGroups() ([]home.Group, error) {
-    coapJson, err := g.coap("get", "/15004", "")
+func (g *IkeaGateway) AllGroups(ctx context.Context) ([]home.Group, error) {
+    coapJson, err := g.coap(ctx, "get", "/15004", "")
     if err != nil {
         return []home.Group{}, err
     }
@@ -123,7 +138,7 @@ func (g *IkeaGateway) AllGroups() ([]home.Group, error) {
     groups := []home.Group{}
 
     for _, id := range ids {
-    	if group , err := g.AddressGroup(id); err != nil {
+    	if group , err := g.AddressGroup(ctx, id); err != nil {
 			return []home.Group{}, err
 		} else {
 			groups = append(groups, group)
@@ -158,9 +173,11 @@ func NewIkeaLight(gateway *IkeaGateway, id int, name string) *IkeaLight {
     }
 }
 
+func (l *IkeaLight) Name() string { return l.name }
+func (l *IkeaLight) Id() home.DeviceId { return home.DeviceId(l.id) }
 
-func (l *IkeaLight) State() (home.State, error) {
-    if deviceJson, err := l.gateway.coap("get", l.path, ""); err != nil {
+func (l *IkeaLight) State(ctx context.Context) (home.State, error) {
+    if deviceJson, err := l.gateway.coap(ctx, "get", l.path, ""); err != nil {
         return nil, err
     } else {
         return &lightState{
@@ -169,20 +186,12 @@ func (l *IkeaLight) State() (home.State, error) {
     }
 }
 
-func (l *IkeaLight) TurnOn() error {
-    _, err := l.gateway.coap("put", l.path, `{ "3311": [{ "5850": 1 }] }`)
+func (l *IkeaLight) TurnOn(ctx context.Context) error {
+    _, err := l.gateway.coap(ctx, "put", l.path, `{ "3311": [{ "5850": 1 }] }`)
     return err
 }
 
-func (l *IkeaLight) TurnOff() error {
-    _, err := l.gateway.coap("put", l.path, `{ "3311": [{ "5850": 0 }] }`)
+func (l *IkeaLight) TurnOff(ctx context.Context) error {
+    _, err := l.gateway.coap(ctx, "put", l.path, `{ "3311": [{ "5850": 0 }] }`)
     return err
-}
-
-func (l *IkeaLight) Name() string {
-    return l.name
-}
-
-func (l *IkeaLight) Id() home.DeviceId {
-    return home.DeviceId(l.id)
 }

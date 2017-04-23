@@ -1,6 +1,7 @@
 package lights
 
 import (
+	"context"
 	"encoding/json"
 
     "github.com/tombooth/home"
@@ -14,8 +15,8 @@ const LightType = "light"
 type Light interface {
     home.Device
 
-    TurnOn() error
-    TurnOff() error
+    TurnOn(context.Context) error
+    TurnOff(context.Context) error
 }
 
 type DefaultLight struct { }
@@ -66,14 +67,14 @@ func (_ *LightController) For() home.DeviceType {
     return LightType
 }
 
-func (_ *LightController) Reconcile(l home.Device, c, d home.State) error {
+func (_ *LightController) Reconcile(ctx context.Context, l home.Device, c, d home.State) error {
     light, current, desired := l.(Light), c.(LightState), d.(LightState)
 
     if current.On() != desired.On() {
         if desired.On() {
-            return light.TurnOn()
+            return light.TurnOn(ctx)
         } else {
-            return light.TurnOff()
+            return light.TurnOff(ctx)
         }
     }
 

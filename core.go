@@ -1,6 +1,7 @@
 package home
 
 import (
+	"context"
 )
 
 
@@ -22,7 +23,7 @@ type Device interface {
     Id() DeviceId
     Type() DeviceType
     Name() string
-    State() (State, error)
+    State(context.Context) (State, error)
 	UnmarshalState([]byte) (State, error)
 }
 
@@ -41,5 +42,5 @@ type Group struct {
 
 type Controller interface {
     For() DeviceType
-    Reconcile(Device, State, State) error
+    Reconcile(context.Context, Device, State, State) error
 }

@@ -1,30 +1,29 @@
 package blinds
 
 import (
-	//"context"
-    "crypto/aes"
-    "crypto/hmac"
-    "crypto/sha256"
-    "encoding/binary"
-    "encoding/hex"
-    "fmt"
+	"context"
+	"crypto/aes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"math/rand"
-    "os/exec"
-
+	"os/exec"
 	//"github.com/currantlabs/ble"
 	//"github.com/currantlabs/ble/examples/lib/dev"
 )
 
 type CSRMesh struct {
-    destination string
-    key []byte
+	destination string
+	key         []byte
 }
 
 func NewCSRMesh(destination string, pin int) *CSRMesh {
-    return &CSRMesh {
-        destination: destination,
-        key: pinToKey(pin),
-    }
+	return &CSRMesh{
+		destination: destination,
+		key:         pinToKey(pin),
+	}
 }
 
 func freshSeq() uint32 {
@@ -33,34 +32,33 @@ func freshSeq() uint32 {
 	return uint32(out[0])
 }
 
-func (csr *CSRMesh) Send(handle uint16, data []byte) error {
+func (csr *CSRMesh) Send(ctx context.Context, handle uint16, data []byte) error {
 	packet, err := makePacket(
-        freshSeq(),
-        csr.key,
-        data,
-    )
+		freshSeq(),
+		csr.key,
+		data,
+	)
 
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
-    if len(packet) > 20 {
-        if err = csr.write(handle, packet[0:20]); err != nil {
-            return err
-        }
+	if len(packet) > 20 {
+		if err = csr.write(ctx, handle, packet[0:20]); err != nil {
+			return err
+		}
 
-        if err = csr.write(handle + 3, packet[20:]); err != nil {
-            return err
-        }
-    } else {
-        if err = csr.write(handle, packet); err != nil {
-            return err
-        }
-    }
+		if err = csr.write(ctx, handle+3, packet[20:]); err != nil {
+			return err
+		}
+	} else {
+		if err = csr.write(ctx, handle, packet); err != nil {
+			return err
+		}
+	}
 
-    return nil
+	return nil
 }
-
 
 /*func findByHandle(client ble.Client, handle uint16) (*ble.Characteristic, error) {
 	services, err := client.DiscoverServices(nil)
@@ -113,38 +111,42 @@ func (csr *CSRMesh) write(handle uint16, data []byte) error {
 	return nil
 }*/
 
-
-func (csr *CSRMesh) write(handle uint16, data []byte) error {
-    handleBytes := make([]byte, 2)
-    binary.BigEndian.PutUint16(handleBytes, handle)
-    handleHex := make([]byte, hex.EncodedLen(2))
+func (csr *CSRMesh) write(ctx context.Context, handle uint16, data []byte) error {
+	handleBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(handleBytes, handle)
+	handleHex := make([]byte, hex.EncodedLen(2))
 	hex.Encode(handleHex, handleBytes)
 
-    dataHex := make([]byte, hex.EncodedLen(len(data)))
+	dataHex := make([]byte, hex.EncodedLen(len(data)))
 	hex.Encode(dataHex, data)
 
-    cmd := exec.Command(
-        "/usr/bin/gatttool",
-        "-b", csr.destination,
-        "--char-write-req",
-        "-a", fmt.Sprintf("0x%s", handleHex),
-        "-n", string(dataHex),
-    )
+	errOut := make(chan error)
 
-	fmt.Printf("/usr/bin/gatttool -b %s --char-write-req -a 0x%s -n %s\n", csr.destination, handleHex, dataHex)
+	go func() {
+		cmd := exec.Command(
+			"/usr/bin/gatttool",
+			"-b", csr.destination,
+			"--char-write-req",
+			"-a", fmt.Sprintf("0x%s", handleHex),
+			"-n", string(dataHex),
+		)
 
-    output, err := cmd.Output()
+		fmt.Printf("/usr/bin/gatttool -b %s --char-write-req -a 0x%s -n %s\n", csr.destination, handleHex, dataHex)
 
-    fmt.Println(string(output))
+		output, err := cmd.Output()
 
-    return err
+		fmt.Println(string(output))
+
+		errOut <- err
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errOut:
+		return err
+	}
 }
-
-
-
-
-
-
 
 func reverse(numbers []byte) []byte {
 	newNumbers := make([]byte, len(numbers))
@@ -155,90 +157,90 @@ func reverse(numbers []byte) []byte {
 }
 
 func pinToKey(pin int) []byte {
-    strPin := fmt.Sprintf("%04d", pin)
-    bytesPin := append([]byte(strPin), byte(0))
-    bytesPin = append(bytesPin, []byte("MCP")...)
+	strPin := fmt.Sprintf("%04d", pin)
+	bytesPin := append([]byte(strPin), byte(0))
+	bytesPin = append(bytesPin, []byte("MCP")...)
 
-    h := sha256.New()
-    h.Write(bytesPin)
-    out := reverse(h.Sum(nil))
-    return out[:16]
+	h := sha256.New()
+	h.Write(bytesPin)
+	out := reverse(h.Sum(nil))
+	return out[:16]
 }
 
 func xor(dst, a, b []byte) int {
-    n := len(a)
-    if len(b) < n {
-        n = len(b)
-    }
-    for i := 0; i < n; i++ {
-        dst[i] = a[i] ^ b[i]
-    }
-    return n
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		dst[i] = a[i] ^ b[i]
+	}
+	return n
 }
 
 func makePacket(seq uint32, key, data []byte) ([]byte, error) {
-    base, err := toBytes([]interface{}{
-        seq,
+	base, err := toBytes([]interface{}{
+		seq,
 		uint8(0),
 		uint8(0x80), // Magic
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
 	})
 
-    if err != nil {
-        return []byte{}, err
-    }
+	if err != nil {
+		return []byte{}, err
+	}
 
-    if len(key) != 16 || len(base) != 16 {
-        return []byte{}, fmt.Errorf("We are assuming byte lengths of 16, because fake ECB and stuff")
-    }
+	if len(key) != 16 || len(base) != 16 {
+		return []byte{}, fmt.Errorf("We are assuming byte lengths of 16, because fake ECB and stuff")
+	}
 
-    aesCipher, err := aes.NewCipher(key)
-    if err != nil {
-        return []byte{}, err
-    }
+	aesCipher, err := aes.NewCipher(key)
+	if err != nil {
+		return []byte{}, err
+	}
 
-    encryptedBase := make([]byte, 16)
-    aesCipher.Encrypt(encryptedBase, base)
+	encryptedBase := make([]byte, 16)
+	aesCipher.Encrypt(encryptedBase, base)
 
-    payload := make([]byte, len(data))
-    xor(payload, data, encryptedBase[:len(data)])
+	payload := make([]byte, len(data))
+	xor(payload, data, encryptedBase[:len(data)])
 
-    message, err := toBytes([]interface{}{
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        uint8(0),
-        seq,
-        uint8(0x80),
-        payload,
-    })
+	message, err := toBytes([]interface{}{
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		uint8(0),
+		seq,
+		uint8(0x80),
+		payload,
+	})
 
-    if err != nil {
-        return []byte{}, err
-    }
+	if err != nil {
+		return []byte{}, err
+	}
 
-    sigHash := hmac.New(sha256.New, key)
-    sigHash.Write(message)
-    sig:= reverse(sigHash.Sum(nil))[:8]
+	sigHash := hmac.New(sha256.New, key)
+	sigHash.Write(message)
+	sig := reverse(sigHash.Sum(nil))[:8]
 
-    return toBytes([]interface{}{
-        seq,
-        uint8(0x80),
-        payload,
-        sig,
-        uint8(0xFF),
-    })
+	return toBytes([]interface{}{
+		seq,
+		uint8(0x80),
+		payload,
+		sig,
+		uint8(0xFF),
+	})
 }
