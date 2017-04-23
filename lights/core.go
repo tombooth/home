@@ -4,25 +4,22 @@ import (
 	"context"
 	"encoding/json"
 
-    "github.com/tombooth/home"
+	"github.com/tombooth/home"
 )
-
-
-
 
 const LightType = "light"
 
 type Light interface {
-    home.Device
+	home.Device
 
-    TurnOn(context.Context) error
-    TurnOff(context.Context) error
+	TurnOn(context.Context) error
+	TurnOff(context.Context) error
 }
 
-type DefaultLight struct { }
+type DefaultLight struct{}
 
 func (d *DefaultLight) Type() home.DeviceType {
-    return LightType
+	return LightType
 }
 
 func (d *DefaultLight) UnmarshalState(raw []byte) (home.State, error) {
@@ -35,48 +32,40 @@ func (d *DefaultLight) UnmarshalState(raw []byte) (home.State, error) {
 	return &state, nil
 }
 
-
-
-
-
 type LightState interface {
-    home.State
+	home.State
 
-    On() bool
+	On() bool
 }
 
 type lightState struct {
-    IsOn bool `json:"on"`
+	IsOn bool `json:"on"`
 }
 
 func NewLightState(on bool) home.State {
-    return &lightState{on}
+	return &lightState{on}
 }
 
 func (ls *lightState) On() bool {
-    return ls.IsOn
+	return ls.IsOn
 }
 
-
-
-
-
-type LightController struct { }
+type LightController struct{}
 
 func (_ *LightController) For() home.DeviceType {
-    return LightType
+	return LightType
 }
 
 func (_ *LightController) Reconcile(ctx context.Context, l home.Device, c, d home.State) error {
-    light, current, desired := l.(Light), c.(LightState), d.(LightState)
+	light, current, desired := l.(Light), c.(LightState), d.(LightState)
 
-    if current.On() != desired.On() {
-        if desired.On() {
-            return light.TurnOn(ctx)
-        } else {
-            return light.TurnOff(ctx)
-        }
-    }
+	if current.On() != desired.On() {
+		if desired.On() {
+			return light.TurnOn(ctx)
+		} else {
+			return light.TurnOff(ctx)
+		}
+	}
 
-    return nil
+	return nil
 }

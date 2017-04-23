@@ -47,7 +47,7 @@ func main() {
 		for {
 			select {
 
-			case <- stepTicker.C:
+			case <-stepTicker.C:
 				log.Println("Stepping the world forward")
 				timeoutContext, _ := context.WithTimeout(context.Background(), config.StepInterval)
 				elapsed("Stepping", func() {
@@ -56,7 +56,7 @@ func main() {
 					}
 				})
 
-			case transition := <- transitions:
+			case transition := <-transitions:
 				log.Printf("Applying a transition: %v\n", transition)
 				if err := world.Apply(transition); err != nil {
 					log.Println(err)

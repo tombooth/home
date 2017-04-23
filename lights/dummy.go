@@ -7,26 +7,24 @@ import (
 	"github.com/tombooth/home"
 )
 
-
-
 type dummyLight struct {
 	DefaultLight
 
-	id home.DeviceId
-	name string
+	id    home.DeviceId
+	name  string
 	state home.State
 }
 
 func NewDummyLight(id home.DeviceId, name string, isOn bool) Light {
-	return &dummyLight {
-		id: id,
-		name: name,
+	return &dummyLight{
+		id:    id,
+		name:  name,
 		state: NewLightState(isOn),
 	}
 }
 
 func (l *dummyLight) Id() home.DeviceId { return l.id }
-func (l *dummyLight) Name() string { return l.name }
+func (l *dummyLight) Name() string      { return l.name }
 
 func (l *dummyLight) State(ctx context.Context) (home.State, error) {
 	return l.state, nil
@@ -42,8 +40,6 @@ func (l *dummyLight) TurnOff(ctx context.Context) error {
 	return nil
 }
 
-
-
 type slowLight struct {
 	dummyLight
 }
@@ -51,8 +47,8 @@ type slowLight struct {
 func NewSlowLight(id home.DeviceId, name string, isOn bool) Light {
 	return &slowLight{
 		dummyLight: dummyLight{
-			id: id,
-			name: name,
+			id:    id,
+			name:  name,
 			state: NewLightState(isOn),
 		},
 	}

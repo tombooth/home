@@ -17,9 +17,9 @@ func response(w http.ResponseWriter, data interface{}) {
 }
 
 type StateResource struct {
-	Id home.DeviceId
-	Type home.DeviceType
-	Name string
+	Id    home.DeviceId
+	Type  home.DeviceType
+	Name  string
 	State home.State
 }
 
